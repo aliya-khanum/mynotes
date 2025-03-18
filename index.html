@@ -3,22 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Notes App</title>
-  
-  <!-- Manifest -->
-  <link rel="manifest" href="manifest.json" />
-  
-  <!-- Stylesheet -->
+  <title>My Notes App with Edit & Upload</title>
   <link rel="stylesheet" href="styles.css" />
-  
-  <!-- Favicon (optional) -->
+  <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon-192.png" type="image/png" />
-
 </head>
 <body>
   <div class="container">
     <h1>My Notes</h1>
-    
+
     <div class="controls">
       <button id="toggleMode">🌙 Toggle Dark/Light</button>
     </div>
@@ -26,6 +19,7 @@
     <div class="input-section">
       <input type="text" id="noteTitle" placeholder="Note title" />
       <textarea id="noteContent" placeholder="Write your note..."></textarea>
+      <input type="file" id="noteFile" accept="image/*,.pdf" />
       <button onclick="saveNote()">Save Note</button>
     </div>
 
@@ -35,7 +29,7 @@
     </div>
   </div>
 
-  <!-- Service Worker Registration -->
+  <!-- Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js')
@@ -45,26 +39,66 @@
 
   <script>
     let notes = JSON.parse(localStorage.getItem('notes')) || [];
+    let editIndex = null;
 
     const notesList = document.getElementById('notesList');
     const noteTitle = document.getElementById('noteTitle');
     const noteContent = document.getElementById('noteContent');
+    const noteFile = document.getElementById('noteFile');
 
     function saveNote() {
       const title = noteTitle.value.trim();
       const content = noteContent.value.trim();
+
       if (!title || !content) {
-        alert('Please fill in both fields!');
+        alert('Please enter both title and content!');
         return;
       }
 
-      const note = { title, content, time: new Date().toLocaleString() };
-      notes.push(note);
-      localStorage.setItem('notes', JSON.stringify(notes));
+      const reader = new FileReader();
+      const file = noteFile.files[0];
 
+      reader.onloadend = function() {
+        const fileData = reader.result || null;
+
+        const note = {
+          title,
+          content,
+          time: new Date().toLocaleString(),
+          file: fileData
+        };
+
+        if (editIndex !== null) {
+          notes[editIndex] = note;
+          editIndex = null;
+        } else {
+          notes.push(note);
+        }
+
+        localStorage.setItem('notes', JSON.stringify(notes));
+        resetForm();
+        displayNotes();
+      };
+
+      if (file) {
+        reader.readAsDataURL(file);
+      } else {
+        reader.onloadend(); // Call immediately if there's no file selected
+      }
+    }
+
+    function resetForm() {
       noteTitle.value = '';
       noteContent.value = '';
-      displayNotes();
+      noteFile.value = '';
+    }
+
+    function editNote(index) {
+      const note = notes[index];
+      noteTitle.value = note.title;
+      noteContent.value = note.content;
+      editIndex = index;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function deleteNote(index) {
@@ -83,10 +117,24 @@
             <h3>${note.title}</h3>
             <p>${note.content}</p>
             <small>${note.time}</small><br/>
+
+            ${note.file ? displayFile(note.file) : ''}
+
+            <button onclick="editNote(${index})">✏️ Edit</button>
             <button onclick="deleteNote(${index})">🗑️ Delete</button>
           </div>
         `;
       });
+    }
+
+    function displayFile(fileData) {
+      if (fileData.startsWith('data:image')) {
+        return `<img src="${fileData}" class="note-image" />`;
+      } else if (fileData.startsWith('data:application/pdf')) {
+        return `<a href="${fileData}" target="_blank">📄 Open PDF</a>`;
+      } else {
+        return `<a href="${fileData}" target="_blank">📎 Open File</a>`;
+      }
     }
 
     const toggleButton = document.getElementById('toggleMode');
